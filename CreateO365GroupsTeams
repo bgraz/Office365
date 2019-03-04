@@ -1,0 +1,65 @@
+# CreateO365GroupsTeams.ps1
+#
+# CSV file format:
+# Name,Email,Access,Owner,Members
+# Team Name,teamemail@domain.com,Private OR Public,ownersEmail@domain.com,memberEmail1@domain.com;memberEmail2@domain.com;memberEmail3@domain.com
+#
+# Microsoft-Teams module required for the team creation:
+# Install-Module MicrosoftTeams
+
+# Get Office 365 credentials
+$c = Get-Credential
+
+# Import MSOnline module and connect to Office 365 & Teams
+Import-Module MSOnline
+Connect-MicrosoftTeams -Credential $c
+Connect-MsolService -Credential $c
+
+
+# Update your CSV file path (and again later in the script)
+import-csv -Path c:\temp\dvsm_group_import.csv | foreach ($_.Name) {
+
+# Converts member array of email1@domain.com;email2@domain.com;email3@domain.com into strings
+$Member = $_.Members -split ";"
+$O365Groups = $_.Name
+
+# Start the group creation
+"---------------------------------------"
+"Creating group " + $_.Name
+"---------------------------------------"
+
+New-UnifiedGroup -DisplayName $_.Name -Owner $_.Owner -AccessType $_.Access -PrimarySmtp $_.Email
+
+# Disable welcome email for the group's members, enable subscription and subscribe new members
+"---------------------------------------"
+"Updating settings for group " + $_.Name
+"---------------------------------------"
+
+Set-UnifiedGroup $_.Name -UnifiedGroupWelcomeMessageEnabled:$false -SubscriptionEnabled:$true -AutoSubscribeNewMembers:$true
+
+"Adding members to group " + $_.Name
+"---------------------------------------"
+
+# Adds each member to the group
+foreach ($Member in $Member) { 
+
+Add-UnifiedGroupLinks -Identity $_.Email -LinkType Members -Links $Member 
+"Added " + $Member + " to " + $_.Name
+Add-UnifiedGroupLinks -Identity $_.Email -LinkType Subscribers -Links $Member
+"Subscribing " + $Member + " to " + $_.Name
+
+}
+
+# Reset the member variable for the next line
+$Member = $null
+
+}
+
+# Create the team for each group created above
+import-csv -Path c:\temp\dvsm_group_import.csv | foreach ($_.Name) { 
+$Group = Get-UnifiedGroup -Identity $_.Name
+New-Team -Group $Group.ExternalDirectoryObjectId 
+"---------------------------------------"
+"Created team " + $Group.DisplayName
+"---------------------------------------"
+}
